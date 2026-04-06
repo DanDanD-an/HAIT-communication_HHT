@@ -667,10 +667,10 @@ elif st.session_state.phase == "survey":
     sat6 = st.radio("**나의 파트너도 이번 협업을 긍정적으로 느낄 것이다.**", scale5, index=None, key="sat6")
 
     # ─────────────────────────────────────────
-    # ── 협업 성과 (주관)
+    # ── 협업 성과
     # ─────────────────────────────────────────
     st.divider()
-    st.subheader("5. 협업 성과 (주관)")
+    st.subheader("5. 협업 성과")
     perf1 = st.radio("**우리 팀은 매우 생산적이었다.**", scale5, index=None, key="perf1")
     perf2 = st.radio("**우리 팀은 양질의 업무를 수행했다.**", scale5, index=None, key="perf2")
     perf3 = st.radio("**우리 팀은 과제 목표를 달성했다.**", scale5, index=None, key="perf3")
