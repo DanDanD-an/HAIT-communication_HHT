@@ -179,9 +179,11 @@ def poll_messages():
 
         if new_entries:
             for entry in new_entries:
-                st.session_state.chat_display.append(
-                    (entry["role"], entry["message"], entry["user_id"])
-                )
+                # 내가 보낸 메시지는 send_message() 시점에 이미 로컬 추가됨 → 중복 방지
+                if entry["user_id"] != st.session_state.user_id:
+                    st.session_state.chat_display.append(
+                        (entry["role"], entry["message"], entry["user_id"])
+                    )
             st.session_state.last_row_index = new_entries[-1]["row_index"]
     except Exception:
         pass
@@ -301,7 +303,7 @@ elif st.session_state.phase == "task_desc":
 - 협업 과제는 **30분간** 진행되며, 과제 종료 후 각 팀은 **A4 1쪽 내외의 기획안**을 제출해야 합니다.
 - 파트너와 **익명 텍스트 채팅으로만 협업**합니다. (이미지·파일·음성 공유는 허용되지 않습니다.)
 - 각 참여자는 기획자 또는 개발자 역할을 맡으며, 역할에 따라 서로 다른 정보를 제공받습니다.
-- **외부 AI 도구(ChatGPT, Claude 등) 사용은 엄격히 금지**됩니다.
+- **외부 AI 도구(ChatGPT, Gemini 등) 사용은 엄격히 금지**됩니다.
 """)
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("제출물 (최종 기획안) — A4 1쪽 분량")
@@ -311,7 +313,7 @@ elif st.session_state.phase == "task_desc":
 2. 최종 선정 기능과 선정 사유
 3. 기대효과와 한계
 
-제공되는 템플릿 링크(Google Docs)에 작성해 주시면 됩니다.
+카카오톡을 통해 제공되는 템플릿 링크(Google Docs)에 작성해 주시면 됩니다.
 """)
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("유의사항")
@@ -396,7 +398,7 @@ elif st.session_state.phase == "role_card":
 
     st.divider()
     st.info("📌 역할 카드를 충분히 숙지하셨으면 아래 버튼을 눌러 파트너와의 채팅을 시작하세요. 과제(채팅) 중에도 역할 카드 확인이 가능합니다.")
-    st.warning("⚠️ 외부 AI 도구(ChatGPT, Claude 등) 사용은 실험 규정상 엄격히 금지됩니다.")
+    st.warning("⚠️ 외부 AI 도구(ChatGPT, Gemini 등) 사용은 실험 규정상 엄격히 금지됩니다.")
 
     if st.button("과제 시작 (30분 타이머 시작) →"):
         st.session_state.task_start = time.time()
@@ -494,9 +496,6 @@ elif st.session_state.phase == "task":
         st.session_state.chat_display.append(
             (role, user_input, st.session_state.user_id)
         )
-        # last_row_index를 +1 해서 방금 내가 보낸 메시지를 polling에서 중복 처리하지 않도록
-        st.session_state.last_row_index += 1
-
         # 실시간 저장 (conversation_hht 시트에도 보관)
         try:
             sheets_append(conversation_ws, [
@@ -512,9 +511,6 @@ elif st.session_state.phase == "task":
         st.rerun()
 
     st.divider()
-    st.info("📌 해당 페이지를 벗어나면 채팅 내용의 확인이 불가합니다. 기획안을 모두 작성한 상태에서 제출 버튼을 눌러주세요.")
-    st.info("📌 기획안은 카카오톡을 통해 제공된 구글독스 링크에 작성해주세요.")
-    
     if st.button("✅ 기획안 완성 → 제출 페이지로"):
         go("proposal")
 
@@ -632,7 +628,7 @@ elif st.session_state.phase == "survey":
     st.markdown("<br>", unsafe_allow_html=True)
     trust_F1 = st.radio("**파트너의 의견이 확실히 옳은지 모르더라도 나는 그것을 신뢰했다.**", scale5, index=None, key="trust_F1")
     trust_F2 = st.radio("**의사결정이 불확실할 때, 나는 내 판단보다 파트너의 의견을 더 신뢰했다.**", scale5, index=None, key="trust_F2")
-    trust_F3 = st.radio("**결정이 확신이 서지 않을 때, 나는 파트너가 최선의 해결책을 제시할 것이라 믿었다.**", scale5, index=None, key="trust_F3")
+    trust_F3 = st.radio("**결정에 확신이 서지 않을 때, 나는 파트너가 최선의 해결책을 제시할 것이라 믿었다.**", scale5, index=None, key="trust_F3")
     trust_F4 = st.radio("**파트너가 예상치 못한 의견을 제시하더라도, 그것이 옳다고 믿었다.**", scale5, index=None, key="trust_F4")
     trust_F5 = st.radio("**근거가 없어도, 파트너가 어려운 문제를 해결할 수 있다고 확신했다.**", scale5, index=None, key="trust_F5")
 
@@ -758,12 +754,12 @@ elif st.session_state.phase == "survey":
 elif st.session_state.phase == "done":
 
     st.title("🎉 실험 완료")
-    st.success("설문까지 모두 완료하셨습니다. 진심으로 감사드립니다!")
+    st.success("설문까지 모두 완료하셨습니다. 참여해주셔서 감사드립니다! 🙇‍♀️")
     st.markdown(f"""
 **참여자 ID**: `{st.session_state.user_id}`
-(보상 지급을 위해 위의 참여자 ID를 연구자 카카오톡으로 제출해 주세요.)
+(보상 지급 확인 시 사용될 수 있습니다.)
 
-참여 보상은 연구팀에서 데이터 확인 후, 카카오톡을 통해 지급해 드릴 예정입니다.
+참여 보상은 연구팀에서 데이터 확인 후, 카카오톡(개인톡)을 통해 지급해 드릴 예정입니다.
 문의사항은 아래 이메일 또는 카카오톡으로 연락해 주세요.
 
 📧 연구자: 노단 (고려대학교 박사과정) | dandandan1002@gmail.com | 카카오톡 ID: dandan_dan
