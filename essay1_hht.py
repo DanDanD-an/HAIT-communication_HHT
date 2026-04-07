@@ -231,15 +231,15 @@ if st.session_state.phase == "consent":
     st.divider()
 
     agree = st.radio(
-        "연구참여 동의 여부를 선택해 주세요.",
-        [" 연구참여에 동의합니다.", " 연구참여에 동의하지 않습니다."],
+        "귀하께서 연구 참여에 동의하십니까?",
+        [" 연구 참여에 동의합니다.", " 연구 참여에 동의하지 않습니다."],
         index=None
     )
 
     if st.button("다음 →", disabled=(agree is None)):
         consent_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        if agree == " 연구참여에 동의하지 않습니다.":
+        if agree == " 연구 참여에 동의하지 않습니다.":
             consent_ws.append_row([
                 consent_timestamp,
                 st.session_state.user_id,
