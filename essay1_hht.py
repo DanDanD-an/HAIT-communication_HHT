@@ -41,58 +41,49 @@ survey_ws, conversation_ws, proposal_ws, consent_ws, chatroom_ws = connect_sheet
 # ─────────────────────────────────────────
 # 2. 헤더 자동 삽입
 # ─────────────────────────────────────────
-def insert_headers_if_empty(worksheet, headers):
-    key = f"header_checked_{worksheet.title}"
-    if key not in st.session_state:
+@st.cache_resource
+def ensure_headers(_survey_ws, _conversation_ws, _proposal_ws, _consent_ws, _chatroom_ws):
+    """앱 전체에서 딱 1번만 실행 — autorefresh/다중 세션 무관"""
+    def _check(ws, headers):
+        for attempt in range(3):
+            try:
+                if not ws.get("A1"):
+                    ws.append_row(headers)
+                return
+            except Exception:
+                if attempt < 2:
+                    time.sleep(3)
+    _check(_survey_ws, [
+        "timestamp", "user_id", "room_id", "condition", "role",
+        "mc_partner_type",
+        "trust_R1","trust_R2","trust_R3","trust_R4","trust_R5",
+        "trust_T1","trust_T2","trust_T3","trust_T4","trust_T5",
+        "trust_U1","trust_U2","trust_U3","trust_U4","trust_U5",
+        "trust_F1","trust_F2","trust_F3","trust_F4","trust_F5",
+        "trust_P1","trust_P2","trust_P3","trust_P4","trust_P5",
+        "team1","team2","team3","team4","team5",
+        "sat1","sat2","sat3","sat4","sat5","sat6",
+        "perf1","perf2","perf3","perf_self",
+        "topic_sensitivity","kakao_id",
+    ])
+    _check(_conversation_ws, ["timestamp","user_id","room_id","role","message"])
+    _check(_proposal_ws, ["timestamp","user_id","room_id","condition","role","gdocs_link","proposal_text"])
+    _check(_consent_ws, ["consent_timestamp","user_id","agreement"])
+    _check(_chatroom_ws, ["timestamp","room_id","user_id","role","message"])
+
+ensure_headers(survey_ws, conversation_ws, proposal_ws, consent_ws, chatroom_ws)
+
+def sheets_append(ws, row):
+    """Google Sheets 안전 쓰기 — 429 시 최대 3회 재시도"""
+    for attempt in range(4):
         try:
-            first_cell = worksheet.get("A1")
-            if not first_cell:
-                worksheet.append_row(headers)
-            st.session_state[key] = True
+            ws.append_row(row, value_input_option="USER_ENTERED")
+            return
         except Exception as e:
-            if "429" in str(e):
-                time.sleep(2)
+            if "429" in str(e) and attempt < 3:
+                time.sleep(3 * (attempt + 1))
             else:
-                st.error(f"헤더 오류: {e}")
-
-insert_headers_if_empty(survey_ws, [
-    "timestamp", "user_id", "room_id", "condition", "role",
-    # 조작점검
-    "mc_partner_type",
-    # 신뢰 – Perceived Reliability (5문항)
-    "trust_R1","trust_R2","trust_R3","trust_R4","trust_R5",
-    # 신뢰 – Perceived Technical Competence (5문항)
-    "trust_T1","trust_T2","trust_T3","trust_T4","trust_T5",
-    # 신뢰 – Perceived Understandability (5문항)
-    "trust_U1","trust_U2","trust_U3","trust_U4","trust_U5",
-    # 신뢰 – Faith (5문항)
-    "trust_F1","trust_F2","trust_F3","trust_F4","trust_F5",
-    # 신뢰 – Personal Attachment (5문항)
-    "trust_P1","trust_P2","trust_P3","trust_P4","trust_P5",
-    # 팀 인식 (5문항)
-    "team1","team2","team3","team4","team5",
-    # 만족도 (6문항)
-    "sat1","sat2","sat3","sat4","sat5","sat6",
-    # 성과 – 주관 (3문항 + 자기평가)
-    "perf1","perf2","perf3","perf_self",
-])
-
-insert_headers_if_empty(conversation_ws, [
-    "timestamp", "user_id", "room_id", "role", "message"
-])
-
-insert_headers_if_empty(proposal_ws, [
-    "timestamp", "user_id", "room_id", "condition", "role",
-    "gdocs_link", "proposal_text"
-])
-
-insert_headers_if_empty(consent_ws, [
-    "consent_timestamp", "user_id", "agreement"
-])
-
-insert_headers_if_empty(chatroom_ws, [
-    "timestamp", "room_id", "user_id", "role", "message"
-])
+                return
 
 # ─────────────────────────────────────────
 # 3. 역할 레이블
@@ -151,13 +142,13 @@ def go(phase):
 def send_message(message: str):
     """현재 참가자의 메시지를 chatroom_hht 시트에 저장"""
     try:
-        chatroom_ws.append_row([
+        sheets_append(chatroom_ws, [
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             st.session_state.room_id,
             st.session_state.user_id,
             st.session_state.role,
             message
-        ], value_input_option="USER_ENTERED")
+        ])
     except Exception:
         pass
 
@@ -231,28 +222,28 @@ if st.session_state.phase == "consent":
     st.divider()
 
     agree = st.radio(
-        "귀하께서 연구 참여에 동의하십니까?",
-        [" 연구 참여에 동의합니다.", " 연구 참여에 동의하지 않습니다."],
+        "연구참여 동의 여부를 선택해 주세요.",
+        [" 연구참여에 동의합니다.", " 연구참여에 동의하지 않습니다."],
         index=None
     )
 
     if st.button("다음 →", disabled=(agree is None)):
         consent_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        if agree == " 연구 참여에 동의하지 않습니다.":
-            consent_ws.append_row([
+        if agree == " 연구참여에 동의하지 않습니다.":
+            sheets_append(consent_ws, [
                 consent_timestamp,
                 st.session_state.user_id,
                 "비동의"
-            ], value_input_option="USER_ENTERED")
+            ])
             st.warning("연구 참여에 동의하지 않으셨습니다. 참여해 주셔서 감사합니다.")
             st.stop()
 
-        consent_ws.append_row([
+        sheets_append(consent_ws, [
             consent_timestamp,
             st.session_state.user_id,
             "동의"
-        ], value_input_option="USER_ENTERED")
+        ])
         go("role_assign")
 
 # ─────────────────────────────────────────
@@ -508,13 +499,13 @@ elif st.session_state.phase == "task":
 
         # 실시간 저장 (conversation_hht 시트에도 보관)
         try:
-            conversation_ws.append_row([
+            sheets_append(conversation_ws, [
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 st.session_state.user_id,
                 st.session_state.room_id,
                 role,
                 user_input
-            ], value_input_option="USER_ENTERED")
+            ])
         except Exception:
             pass
 
@@ -554,7 +545,7 @@ elif st.session_state.phase == "proposal":
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        proposal_ws.append_row([
+        sheets_append(proposal_ws, [
             timestamp,
             st.session_state.user_id,
             st.session_state.room_id,
@@ -562,7 +553,7 @@ elif st.session_state.phase == "proposal":
             st.session_state.role,
             gdocs_link.strip(),
             ""
-        ], value_input_option="USER_ENTERED")
+        ])
 
         st.session_state.submitted_proposal = True
         go("survey")
@@ -574,6 +565,13 @@ elif st.session_state.phase == "survey":
 
     st.title("사후 설문")
     st.write("협업 경험에 관한 설문입니다. 솔직하게 응답해 주세요. (약 10분 소요)")
+
+    st.divider()
+    st.subheader("📌 보상 지급 정보")
+    kakao_id = st.text_input(
+        "**카카오톡 아이디를 입력해 주세요.** (보상 지급에 사용됩니다)",
+        placeholder="카카오톡 아이디 입력"
+    )
 
     st.markdown("""
     <style>
@@ -667,16 +665,27 @@ elif st.session_state.phase == "survey":
     sat6 = st.radio("**나의 파트너도 이번 협업을 긍정적으로 느낄 것이다.**", scale5, index=None, key="sat6")
 
     # ─────────────────────────────────────────
-    # ── 협업 성과
+    # ── 협업 성과 (주관)
     # ─────────────────────────────────────────
     st.divider()
-    st.subheader("5. 협업 성과")
+    st.subheader("5. 협업 성과 (주관)")
     perf1 = st.radio("**우리 팀은 매우 생산적이었다.**", scale5, index=None, key="perf1")
     perf2 = st.radio("**우리 팀은 양질의 업무를 수행했다.**", scale5, index=None, key="perf2")
     perf3 = st.radio("**우리 팀은 과제 목표를 달성했다.**", scale5, index=None, key="perf3")
     perf_self = st.slider(
         "**전반적으로 이번 협업의 결과물(기획안)의 완성도를 0~100점으로 평가해 주십시오.**",
         min_value=0, max_value=100, value=50, step=1
+    )
+
+    # ─────────────────────────────────────────
+    # ── 토픽 민감도
+    # ─────────────────────────────────────────
+    st.divider()
+    st.subheader("6. 토픽 민감도")
+    topic_sensitivity = st.radio(
+        "**귀하는 식단 관리나 다이어트에 얼마나 관심이 있으십니까?**",
+        ["전혀 관심 없다", "별로 관심 없다", "보통이다", "약간 관심 있다", "매우 관심 있다"],
+        index=None, key="topic_sensitivity"
     )
 
     # ─────────────────────────────────────────
@@ -699,14 +708,16 @@ elif st.session_state.phase == "survey":
             sat1, sat2, sat3, sat4, sat5, sat6,
             # 성과
             perf1, perf2, perf3,
+            # 토픽 민감도
+            topic_sensitivity,
         ]
-        if any(v is None for v in required):
-            st.error("⚠️ 응답하지 않은 항목이 있습니다. 모든 항목을 체크해야 제출할 수 있습니다.")
+        if any(v is None for v in required) or not kakao_id.strip():
+            st.error("⚠️ 응답하지 않은 항목이 있습니다. 카카오톡 아이디와 모든 항목을 입력해야 제출할 수 있습니다.")
             st.stop()
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        survey_ws.append_row([
+        sheets_append(survey_ws, [
             timestamp,
             st.session_state.user_id,
             st.session_state.room_id,
@@ -730,7 +741,11 @@ elif st.session_state.phase == "survey":
             sat1, sat2, sat3, sat4, sat5, sat6,
             # 성과
             perf1, perf2, perf3, perf_self,
-        ], value_input_option="USER_ENTERED")
+            # 토픽 민감도
+            topic_sensitivity,
+            # 카카오톡 아이디
+            kakao_id.strip(),
+        ])
 
         go("done")
 
@@ -743,10 +758,10 @@ elif st.session_state.phase == "done":
     st.success("설문까지 모두 완료하셨습니다. 진심으로 감사드립니다!")
     st.markdown(f"""
 **참여자 ID**: `{st.session_state.user_id}`
-(보상 지급 확인 시 사용될 수 있습니다.)
+(보상 지급을 위해 위의 참여자 ID를 연구자 카카오톡으로 제출해 주세요.)
 
-참여 보상(10,000원)은 연구팀에서 데이터 확인 후, 카카오톡을 통해 지급해 드릴 예정입니다.
-문의사항은 아래 이메일로 연락해 주세요.
+참여 보상은 연구팀에서 데이터 확인 후, 카카오톡을 통해 지급해 드릴 예정입니다.
+문의사항은 아래 이메일 또는 카카오톡으로 연락해 주세요.
 
-📧 연구자: 노단 (고려대학교 미디어학과) | dandandan1002@gmail.com
+📧 연구자: 노단 (고려대학교 박사과정) | dandandan1002@gmail.com | 카카오톡 ID: dandan_dan
 """)
