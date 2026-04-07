@@ -179,12 +179,13 @@ def poll_messages():
 
         if new_entries:
             for entry in new_entries:
-                # 내가 보낸 메시지는 send_message() 시점에 이미 로컬 추가됨 → 중복 방지
+                # 내가 보낸 메시지는 send_message() 시점에 이미 로컬 추가됨 → 표시만 스킵
+                # last_row_index는 내 메시지도 포함해 항상 최신 행으로 업데이트
                 if entry["user_id"] != st.session_state.user_id:
                     st.session_state.chat_display.append(
                         (entry["role"], entry["message"], entry["user_id"])
                     )
-            st.session_state.last_row_index = new_entries[-1]["row_index"]
+                st.session_state.last_row_index = entry["row_index"]
     except Exception:
         pass
 
