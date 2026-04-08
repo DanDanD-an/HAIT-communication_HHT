@@ -512,6 +512,8 @@ elif st.session_state.phase == "task":
         st.rerun()
 
     st.divider()
+    st.info("📌 해당 페이지를 벗어나면 채팅 내용의 확인이 불가합니다. 기획안을 모두 작성한 상태에서 제출 버튼을 눌러주세요.")
+    st.info("📌 기획안은 카카오톡을 통해 제공된 구글독스 링크에 작성해주세요.")
     if st.button("✅ 기획안 완성 → 제출 페이지로"):
         go("proposal")
 
