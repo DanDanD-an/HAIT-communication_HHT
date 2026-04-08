@@ -110,6 +110,8 @@ def init_session():
         "last_row_index":     1,
         # 로컬 표시용 채팅 로그 [(role, message), ...]
         "chat_display":       [],
+        # 양쪽 모두 입장했는지 여부
+        "both_ready":         False,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -139,6 +141,20 @@ def go(phase):
 # ─────────────────────────────────────────
 # 채팅방 메시지 전송 (Google Sheets에 기록)
 # ─────────────────────────────────────────
+def check_both_ready() -> bool:
+    """같은 room_id에서 [READY] 메시지가 2개 이상이면 True"""
+    try:
+        all_rows = chatroom_ws.get_all_values()
+        count = sum(
+            1 for row in all_rows[1:]
+            if len(row) >= 5
+            and row[1] == st.session_state.room_id
+            and row[4] == "[READY]"
+        )
+        return count >= 2
+    except Exception:
+        return False
+
 def send_message(message: str):
     """현재 참가자의 메시지를 chatroom_hht 시트에 저장"""
     try:
@@ -401,8 +417,15 @@ elif st.session_state.phase == "role_card":
     st.info("📌 역할 카드를 충분히 숙지하셨으면 아래 버튼을 눌러 파트너와의 채팅을 시작하세요. 과제(채팅) 중에도 역할 카드 확인이 가능합니다.")
     st.warning("⚠️ 외부 AI 도구(ChatGPT, Gemini 등) 사용은 실험 규정상 엄격히 금지됩니다.")
 
-    if st.button("과제 시작 (30분 타이머 시작) →"):
-        st.session_state.task_start = time.time()
+    if st.button("채팅방 입장 →"):
+        # 입장 기록을 Sheets에 저장 (타이머는 양쪽 모두 입장 후 시작)
+        sheets_append(chatroom_ws, [
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            st.session_state.room_id,
+            st.session_state.user_id,
+            st.session_state.role,
+            "[READY]"
+        ])
         go("task")
 
 # ─────────────────────────────────────────
@@ -410,8 +433,18 @@ elif st.session_state.phase == "role_card":
 # ─────────────────────────────────────────
 elif st.session_state.phase == "task":
 
-    # 5초마다 자동 리렌더링 → 상대방 메시지 polling + 타이머 갱신
+    # 5초마다 자동 리렌더링 → 상대방 입장 확인 + 메시지 polling + 타이머 갱신
     st_autorefresh(interval=5_000, key="task_autorefresh")
+
+    # 양쪽 모두 입장했는지 확인 (한 번 True가 되면 다시 체크 안 함)
+    if not st.session_state.both_ready:
+        if check_both_ready():
+            st.session_state.both_ready = True
+            st.session_state.task_start = time.time()
+        else:
+            st.title("⏳ 파트너 입장 대기 중...")
+            st.info("파트너가 채팅방에 입장하면 자동으로 과제가 시작됩니다.")
+            st.stop()
 
     role         = st.session_state.role
     partner_role = PARTNER_ROLE_LABEL[role]
