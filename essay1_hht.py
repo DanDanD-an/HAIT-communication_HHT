@@ -181,10 +181,14 @@ def poll_messages():
         all_rows = chatroom_ws.get_all_values()
         # 헤더 제외, room_id 필터
         new_entries = []
-        for i, row in enumerate(all_rows[1:], start=2):  # 행 번호 기준 (1-indexed, 헤더=1)
+        for i, row in enumerate(all_rows[1:], start=2):
             if i <= st.session_state.last_row_index:
                 continue
             if len(row) >= 5 and row[1] == st.session_state.room_id:
+                # [READY]는 last_row_index만 업데이트하고 표시는 건너뜀
+                if row[4] == "[READY]":
+                    st.session_state.last_row_index = i
+                    continue
                 # row: [timestamp, room_id, user_id, role, message]
                 new_entries.append({
                     "row_index": i,
