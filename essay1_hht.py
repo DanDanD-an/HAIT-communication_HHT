@@ -106,10 +106,6 @@ def init_session():
         "task_start":         None,
         "timer_expired":      False,
         "submitted_proposal": False,
-        # 마지막으로 읽은 chatroom 행 인덱스 (polling용)
-        "last_row_index":     1,
-        # 로컬 표시용 채팅 로그 [(role, message), ...]
-        "chat_display":       [],
         # 양쪽 모두 입장했는지 여부
         "both_ready":         False,
     }
@@ -142,14 +138,11 @@ def go(phase):
 # 채팅방 메시지 전송 (Google Sheets에 기록)
 # ─────────────────────────────────────────
 def check_both_ready() -> bool:
-    """같은 room_id에서 [READY] 메시지가 2개 이상이면 True.
-    헤더 제외하고 A2:E 범위만 읽어 속도 개선."""
+    """같은 room_id에서 [READY] 메시지가 2개 이상이면 True"""
     try:
-        rows = chatroom_ws.get("A2:E")
-        if not rows:
-            return False
+        all_rows = chatroom_ws.get_all_values()
         count = sum(
-            1 for row in rows
+            1 for row in all_rows[1:]
             if len(row) >= 5
             and row[1] == st.session_state.room_id
             and row[4] == "[READY]"
@@ -176,43 +169,29 @@ def send_message(message: str):
 # ─────────────────────────────────────────
 def poll_messages():
     """
-    chatroom_hht 시트에서 현재 room_id에 해당하는 새 메시지만 읽어
-    st.session_state.chat_display를 최신 상태로 갱신한다.
-    last_row_index 다음 행부터만 읽어 API 호출량을 최소화.
+    chatroom_hht 시트에서 현재 room_id의 모든 메시지를 읽어
+    순서대로 반환한다. (매번 전체 재구성 -> 누락/중복 없음)
     """
     try:
-        next_row = st.session_state.last_row_index + 1
-        # 전체 시트 대신 마지막으로 읽은 행 이후만 가져옴
-        new_rows = chatroom_ws.get(f"A{next_row}:E")
-        if not new_rows:
-            return
-
-        new_entries = []
-        for i, row in enumerate(new_rows, start=next_row):
-            if len(row) >= 5 and row[1] == st.session_state.room_id:
-                # [READY]는 last_row_index만 업데이트하고 표시는 건너뜀
-                if row[4] == "[READY]":
-                    st.session_state.last_row_index = i
-                    continue
-                # row: [timestamp, room_id, user_id, role, message]
-                new_entries.append({
-                    "row_index": i,
-                    "user_id":   row[2],
-                    "role":      row[3],
-                    "message":   row[4],
-                })
-
-        if new_entries:
-            for entry in new_entries:
-                # 내가 보낸 메시지는 send_message() 시점에 이미 로컬 추가됨 → 표시만 스킵
-                # last_row_index는 내 메시지도 포함해 항상 최신 행으로 업데이트
-                if entry["user_id"] != st.session_state.user_id:
-                    st.session_state.chat_display.append(
-                        (entry["role"], entry["message"], entry["user_id"])
-                    )
-                st.session_state.last_row_index = entry["row_index"]
-    except Exception:
-        pass
+        all_rows = chatroom_ws.get_all_values()
+        result = []
+        for row in all_rows[1:]:  # 헤더 제외
+            if len(row) < 5:
+                continue
+            if row[1] != st.session_state.room_id:
+                continue
+            if row[4] == "[READY]":
+                continue
+            # row: [timestamp, room_id, user_id, role, message]
+            result.append({
+                "user_id": row[2],
+                "role":    row[3],
+                "message": row[4],
+            })
+        return result
+    except Exception as e:
+        st.error(f"메시지 로딩 오류: {e}")
+        return []
 
 # ─────────────────────────────────────────
 # 7. 동의서 화면
@@ -443,7 +422,7 @@ elif st.session_state.phase == "role_card":
 elif st.session_state.phase == "task":
 
     # 5초마다 자동 리렌더링 → 상대방 입장 확인 + 메시지 polling + 타이머 갱신
-    st_autorefresh(interval=2_000, key="task_autorefresh")
+    st_autorefresh(interval=5_000, key="task_autorefresh")
 
     # 양쪽 모두 입장했는지 확인 (한 번 True가 되면 다시 체크 안 함)
     if not st.session_state.both_ready:
@@ -514,19 +493,18 @@ elif st.session_state.phase == "task":
 
     st.divider()
 
-    # ── 메시지 polling (5초 자동 새로고침 시마다 실행)
-    poll_messages()
+    # ── 메시지 polling (autorefresh 시마다 시트에서 전체 재구성)
+    messages = poll_messages()
 
     # ── 채팅 메시지 표시
-    for entry in st.session_state.chat_display:
-        speaker_role, msg, sender_uid = entry
-        is_me = (sender_uid == st.session_state.user_id)
+    for entry in messages:
+        is_me = (entry["user_id"] == st.session_state.user_id)
         if is_me:
             with st.chat_message("user", avatar="🧑"):
-                st.write(f"**나 ({role})**: {msg}")
+                st.write(f"**나 ({role})**: {entry['message']}")
         else:
             with st.chat_message("assistant", avatar="🤝"):
-                st.write(f"**파트너 ({speaker_role})**: {msg}")
+                st.write(f"**파트너 ({entry['role']})**: {entry['message']}")
 
     # ── 메시지 입력
     user_input = st.chat_input("메시지를 입력하세요...")
@@ -534,11 +512,6 @@ elif st.session_state.phase == "task":
     if user_input:
         # Google Sheets에 저장 (상대방도 polling으로 읽어감)
         send_message(user_input)
-
-        # 로컬 즉시 표시
-        st.session_state.chat_display.append(
-            (role, user_input, st.session_state.user_id)
-        )
         # 실시간 저장 (conversation_hht 시트에도 보관)
         try:
             sheets_append(conversation_ws, [
