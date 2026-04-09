@@ -707,7 +707,7 @@ elif st.session_state.phase == "survey":
     # ── 협업 성과 (주관)
     # ─────────────────────────────────────────
     st.divider()
-    st.subheader("5. 협업 성과 (주관)")
+    st.subheader("5. 협업 성과")
     perf1 = st.radio("**우리 팀은 매우 생산적이었다.**", scale5, index=None, key="perf1")
     perf2 = st.radio("**우리 팀은 양질의 업무를 수행했다.**", scale5, index=None, key="perf2")
     perf3 = st.radio("**우리 팀은 과제 목표를 달성했다.**", scale5, index=None, key="perf3")
