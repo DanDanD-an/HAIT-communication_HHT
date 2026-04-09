@@ -288,7 +288,7 @@ elif st.session_state.phase == "role_assign":
     st.success(f"귀하의 역할은 **{role}** 입니다.")
     st.info(f"파트너는 **{partner_role}** 역할을 맡았습니다. 같은 room에 접속한 인간 참가자입니다.")
 
-    if st.button("역할 카드 확인하기 →"):
+    if st.button("과제 설명서 확인하기 →"):
         go("task_desc")
 
 # ─────────────────────────────────────────
@@ -537,8 +537,8 @@ elif st.session_state.phase == "task":
         st.rerun()
 
     st.divider()
-    st.info("📌 해당 페이지를 벗어나면 채팅 내용의 확인이 불가합니다. 기획안을 모두 작성한 상태에서 제출 버튼을 눌러주세요.")
-    st.info("📌 기획안은 카카오톡을 통해 제공된 구글독스 링크에 작성해주세요.")
+    st.info("📌 해당 페이지를 벗어나면 채팅 내용의 확인이 불가합니다. 카카오톡을 통해 제공된 구글독스 링크에 기획안을 완성한 상태에서 제출 버튼을 눌러주세요.")
+    st.warning("⚠️ 채팅은 실시간 동기화 방식으로, 메시지가 바로 표시되지 않을 수 있습니다. 메시지 전송 후 잠시 기다려주세요.")
     if st.button("✅ 기획안 완성 → 제출 페이지로"):
         go("proposal")
 
