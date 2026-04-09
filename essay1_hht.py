@@ -135,21 +135,38 @@ def go(phase):
     st.rerun()
 
 # ─────────────────────────────────────────
-# 채팅방 메시지 전송 (Google Sheets에 기록)
+# 채팅방 공통 읽기 (TTL 캐시로 API 절약)
 # ─────────────────────────────────────────
-def check_both_ready() -> bool:
-    """같은 room_id에서 [READY] 메시지가 2개 이상이면 True"""
+_CACHE_TTL = 4  # 초 — autorefresh 간격과 맞춤
+
+def _fetch_chatroom_rows():
+    """
+    chatroom_hht 전체를 읽되, _CACHE_TTL초 안에 중복 호출하면
+    캐시된 결과를 반환해 429를 방지한다.
+    check_both_ready / poll_messages 모두 이 함수를 공유해
+    rerun당 API 호출이 최대 1회로 제한된다.
+    """
+    now = time.time()
+    cached_time = st.session_state.get("_chatroom_cache_time", 0)
+    if now - cached_time < _CACHE_TTL and "_chatroom_cache" in st.session_state:
+        return st.session_state["_chatroom_cache"]
     try:
         all_rows = chatroom_ws.get_all_values()
-        count = sum(
-            1 for row in all_rows[1:]
-            if len(row) >= 5
-            and row[1] == st.session_state.room_id
-            and row[4] == "[READY]"
-        )
-        return count >= 2
+        rows = [r for r in all_rows[1:] if len(r) >= 5]
+        st.session_state["_chatroom_cache"] = rows
+        st.session_state["_chatroom_cache_time"] = now
+        return rows
     except Exception:
-        return False
+        return st.session_state.get("_chatroom_cache", [])
+
+def check_both_ready() -> bool:
+    """같은 room_id에서 [READY] 메시지가 2개 이상이면 True"""
+    rows = _fetch_chatroom_rows()
+    count = sum(
+        1 for row in rows
+        if row[1] == st.session_state.room_id and row[4] == "[READY]"
+    )
+    return count >= 2
 
 def send_message(message: str):
     """현재 참가자의 메시지를 chatroom_hht 시트에 저장"""
@@ -161,37 +178,30 @@ def send_message(message: str):
             st.session_state.role,
             message
         ])
+        # 전송 직후 캐시 무효화 -> 다음 poll에서 내 메시지 즉시 반영
+        st.session_state.pop("_chatroom_cache", None)
+        st.session_state.pop("_chatroom_cache_time", None)
     except Exception:
         pass
 
-# ─────────────────────────────────────────
-# 채팅방 메시지 폴링 (Google Sheets에서 읽기)
-# ─────────────────────────────────────────
 def poll_messages():
     """
-    chatroom_hht 시트에서 현재 room_id의 모든 메시지를 읽어
-    순서대로 반환한다. (매번 전체 재구성 -> 누락/중복 없음)
+    chatroom_hht 시트에서 현재 room_id의 채팅 메시지만 순서대로 반환.
+    (캐시된 rows 재사용 -> API 추가 호출 없음)
     """
-    try:
-        all_rows = chatroom_ws.get_all_values()
-        result = []
-        for row in all_rows[1:]:  # 헤더 제외
-            if len(row) < 5:
-                continue
-            if row[1] != st.session_state.room_id:
-                continue
-            if row[4] == "[READY]":
-                continue
-            # row: [timestamp, room_id, user_id, role, message]
-            result.append({
-                "user_id": row[2],
-                "role":    row[3],
-                "message": row[4],
-            })
-        return result
-    except Exception as e:
-        st.error(f"메시지 로딩 오류: {e}")
-        return []
+    rows = _fetch_chatroom_rows()
+    result = []
+    for row in rows:
+        if row[1] != st.session_state.room_id:
+            continue
+        if row[4] == "[READY]":
+            continue
+        result.append({
+            "user_id": row[2],
+            "role":    row[3],
+            "message": row[4],
+        })
+    return result
 
 # ─────────────────────────────────────────
 # 7. 동의서 화면
@@ -422,7 +432,7 @@ elif st.session_state.phase == "role_card":
 elif st.session_state.phase == "task":
 
     # 5초마다 자동 리렌더링 → 상대방 입장 확인 + 메시지 polling + 타이머 갱신
-    st_autorefresh(interval=5_000, key="task_autorefresh")
+    st_autorefresh(interval=4_000, key="task_autorefresh")
 
     # 양쪽 모두 입장했는지 확인 (한 번 True가 되면 다시 체크 안 함)
     if not st.session_state.both_ready:
