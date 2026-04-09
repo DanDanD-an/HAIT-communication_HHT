@@ -142,11 +142,14 @@ def go(phase):
 # 채팅방 메시지 전송 (Google Sheets에 기록)
 # ─────────────────────────────────────────
 def check_both_ready() -> bool:
-    """같은 room_id에서 [READY] 메시지가 2개 이상이면 True"""
+    """같은 room_id에서 [READY] 메시지가 2개 이상이면 True.
+    헤더 제외하고 A2:E 범위만 읽어 속도 개선."""
     try:
-        all_rows = chatroom_ws.get_all_values()
+        rows = chatroom_ws.get("A2:E")
+        if not rows:
+            return False
         count = sum(
-            1 for row in all_rows[1:]
+            1 for row in rows
             if len(row) >= 5
             and row[1] == st.session_state.room_id
             and row[4] == "[READY]"
@@ -173,17 +176,19 @@ def send_message(message: str):
 # ─────────────────────────────────────────
 def poll_messages():
     """
-    chatroom_hht 시트에서 현재 room_id에 해당하는 모든 메시지를 읽어
+    chatroom_hht 시트에서 현재 room_id에 해당하는 새 메시지만 읽어
     st.session_state.chat_display를 최신 상태로 갱신한다.
-    중복 방지를 위해 last_row_index 이후의 행만 처리.
+    last_row_index 다음 행부터만 읽어 API 호출량을 최소화.
     """
     try:
-        all_rows = chatroom_ws.get_all_values()
-        # 헤더 제외, room_id 필터
+        next_row = st.session_state.last_row_index + 1
+        # 전체 시트 대신 마지막으로 읽은 행 이후만 가져옴
+        new_rows = chatroom_ws.get(f"A{next_row}:E")
+        if not new_rows:
+            return
+
         new_entries = []
-        for i, row in enumerate(all_rows[1:], start=2):
-            if i <= st.session_state.last_row_index:
-                continue
+        for i, row in enumerate(new_rows, start=next_row):
             if len(row) >= 5 and row[1] == st.session_state.room_id:
                 # [READY]는 last_row_index만 업데이트하고 표시는 건너뜀
                 if row[4] == "[READY]":
@@ -438,7 +443,7 @@ elif st.session_state.phase == "role_card":
 elif st.session_state.phase == "task":
 
     # 5초마다 자동 리렌더링 → 상대방 입장 확인 + 메시지 polling + 타이머 갱신
-    st_autorefresh(interval=5_000, key="task_autorefresh")
+    st_autorefresh(interval=2_000, key="task_autorefresh")
 
     # 양쪽 모두 입장했는지 확인 (한 번 True가 되면 다시 체크 안 함)
     if not st.session_state.both_ready:
