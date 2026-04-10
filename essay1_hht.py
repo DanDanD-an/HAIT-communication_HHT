@@ -528,6 +528,14 @@ elif st.session_state.phase == "task":
     if user_input:
         # 백그라운드로 Sheets 저장 (chatroom + conversation 동시 처리)
         send_message(user_input)
+        # 내 메시지 로컬 즉시 추가 (시트 저장 완료 전에도 바로 표시)
+        if "last_messages" not in st.session_state:
+            st.session_state["last_messages"] = []
+        st.session_state["last_messages"].append({
+            "user_id": st.session_state.user_id,
+            "role":    role,
+            "message": user_input,
+        })
         st.rerun()
 
     st.divider()
@@ -786,3 +794,4 @@ elif st.session_state.phase == "done":
 
 📧 연구자: 노단 (고려대학교 박사과정) | dandandan1002@gmail.com | 카카오톡 ID: dandan_dan
 """)
+    
