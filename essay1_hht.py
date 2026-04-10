@@ -3,6 +3,7 @@ from streamlit_autorefresh import st_autorefresh
 from datetime import datetime
 import time
 import uuid
+import threading
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -169,20 +170,19 @@ def check_both_ready() -> bool:
     return count >= 2
 
 def send_message(message: str):
-    """현재 참가자의 메시지를 chatroom_hht 시트에 저장"""
-    try:
-        sheets_append(chatroom_ws, [
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            st.session_state.room_id,
-            st.session_state.user_id,
-            st.session_state.role,
-            message
-        ])
-        # 전송 직후 캐시 무효화 -> 다음 poll에서 내 메시지 즉시 반영
+    """메시지를 백그라운드 스레드로 저장 (UI 블로킹 방지)"""
+    ts      = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    room_id = st.session_state.room_id
+    user_id = st.session_state.user_id
+    role    = st.session_state.role
+
+    def _send():
+        sheets_append(chatroom_ws, [ts, room_id, user_id, role, message])
+        sheets_append(conversation_ws, [ts, user_id, room_id, role, message])
         st.session_state.pop("_chatroom_cache", None)
         st.session_state.pop("_chatroom_cache_time", None)
-    except Exception:
-        pass
+
+    threading.Thread(target=_send, daemon=True).start()
 
 def poll_messages():
     """
@@ -526,20 +526,8 @@ elif st.session_state.phase == "task":
     user_input = st.chat_input("메시지를 입력하세요...")
 
     if user_input:
-        # Google Sheets에 저장 (상대방도 polling으로 읽어감)
+        # 백그라운드로 Sheets 저장 (chatroom + conversation 동시 처리)
         send_message(user_input)
-        # 실시간 저장 (conversation_hht 시트에도 보관)
-        try:
-            sheets_append(conversation_ws, [
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                st.session_state.user_id,
-                st.session_state.room_id,
-                role,
-                user_input
-            ])
-        except Exception:
-            pass
-
         st.rerun()
 
     st.divider()
