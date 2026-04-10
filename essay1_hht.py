@@ -506,6 +506,12 @@ elif st.session_state.phase == "task":
     # ── 메시지 polling (autorefresh 시마다 시트에서 전체 재구성)
     messages = poll_messages()
 
+    # API 응답이 늦거나 비어있으면 이전 결과 유지 (깜빡임 방지)
+    if not messages and "last_messages" in st.session_state:
+        messages = st.session_state["last_messages"]
+    elif messages:
+        st.session_state["last_messages"] = messages
+
     # ── 채팅 메시지 표시
     for entry in messages:
         is_me = (entry["user_id"] == st.session_state.user_id)
