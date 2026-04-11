@@ -286,7 +286,7 @@ elif st.session_state.phase == "role_assign":
 
     st.title("역할 배정 결과")
     st.success(f"귀하의 역할은 **{role}** 입니다.")
-    st.info(f"파트너는 **{partner_role}** 역할을 맡았습니다. 같은 room에 접속한 인간 참가자입니다.")
+    st.info(f"파트너는 **{partner_role}** 역할을 맡았습니다. 같은 room에 접속한 **인간 참가자**입니다.")
 
     if st.button("과제 설명서 확인하기 →"):
         go("task_desc")
